@@ -5,6 +5,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -22,6 +24,8 @@ class AuthController extends Controller
         ]);
         $credentials = $request->only('email', 'password');
 
+
+
         $token = Auth::attempt($credentials);
         if (!$token) {
             return response()->json([
@@ -31,6 +35,14 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
+
+        // التحقق من حالة التحقق من البريد الإلكتروني
+        if (!$user->is_verified) {
+            return response()->json([
+                'error' => 'Email not verified.'
+            ], 403);}
+
+
         return response()->json([
                 'status' => 'success',
                 'user' => $user,
@@ -42,6 +54,10 @@ class AuthController extends Controller
 
     }
 
+
+
+
+
     public function register(Request $request){
         $request->validate([
             'name' => 'required|string|max:255',
@@ -49,21 +65,26 @@ class AuthController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
+        $verification_code = Str::random(6);
+
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'verification_code'=>$verification_code,
+
         ]);
 
-        $token = Auth::login($user);
+        Mail::raw("Your verification code is: $verification_code", function ($message) use ($request) {
+            $message->to($request->email)
+                    ->subject('Email Verification');
+        });
+
+
         return response()->json([
-            'status' => 'success',
-            'message' => 'User created successfully',
-            'user' => $user,
-            'authorisation' => [
-                'token' => $token,
-                'type' => 'bearer',
-            ]
+            'message' => 'Registration successful, please check your email for the verification code.',
+            'user_id' => $user->id
         ]);
     }
 
